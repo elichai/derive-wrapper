@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 #[macro_use]
 extern crate quote;
 #[macro_use]
@@ -9,6 +11,7 @@ use proc_macro2::*;
 use syn::export::ToTokens;
 use syn::{
     Attribute, Data, DeriveInput, Error, Field, Fields, Lit, LitStr, Meta, Path, Result, Type,
+    TypeSlice,
 };
 
 struct Details<'a> {
@@ -42,6 +45,87 @@ pub fn derive_asref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .into()
 }
 
+#[proc_macro_derive(Index, attributes(wrap))]
+pub fn derive_index(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    index_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn index_inner(input: DeriveInput) -> Result<TokenStream> {
+    let field = get_field(&input)?;
+    let Details {
+        struct_name,
+        field_name,
+        field_type,
+        std,
+    } = Details::from_input(&input.ident, field);
+    let field_type = array_to_slice(field_type.clone());
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #std::ops::Index<usize> for #struct_name {
+            type Output = <#field_type as #std::ops::Index<usize>>::Output;
+            #[inline]
+            fn index(&self, index: usize) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+
+         #[allow(unused_qualifications)]
+        impl #std::ops::Index<#std::ops::Range<usize>> for #struct_name {
+            type Output = <#field_type as #std::ops::Index<#std::ops::Range<usize>>>::Output;
+
+            #[inline]
+            fn index(&self, index: #std::ops::Range<usize>) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+
+         #[allow(unused_qualifications)]
+        impl #std::ops::Index<#std::ops::RangeTo<usize>> for #struct_name {
+            type Output = <#field_type as #std::ops::Index<#std::ops::RangeTo<usize>>>::Output;
+
+            #[inline]
+            fn index(&self, index: #std::ops::RangeTo<usize>) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+
+         #[allow(unused_qualifications)]
+        impl #std::ops::Index<#std::ops::RangeFrom<usize>> for #struct_name {
+            type Output = <#field_type as #std::ops::Index<#std::ops::RangeFrom<usize>>>::Output;
+
+            #[inline]
+            fn index(&self, index: #std::ops::RangeFrom<usize>) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+
+         #[allow(unused_qualifications)]
+        impl #std::ops::Index<#std::ops::RangeFull> for #struct_name {
+            type Output = <#field_type as #std::ops::Index<#std::ops::RangeFull>>::Output;
+
+            #[inline]
+            fn index(&self, index: #std::ops::RangeFull) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+    })
+}
+
+fn array_to_slice(ty: Type) -> Type {
+    if let Type::Array(arr) = ty {
+        Type::Slice(TypeSlice {
+            bracket_token: arr.bracket_token,
+            elem: arr.elem,
+        })
+    } else {
+        ty
+    }
+}
+
 fn aserf_inner(input: DeriveInput) -> Result<TokenStream> {
     let field = get_field(&input)?;
     let Details {
@@ -52,7 +136,6 @@ fn aserf_inner(input: DeriveInput) -> Result<TokenStream> {
     } = Details::from_input(&input.ident, field);
 
     Ok(quote! {
-        #[automatically_derived]
         #[allow(unused_qualifications)]
         impl #std::convert::AsRef<#field_type> for #struct_name {
             #[inline]
@@ -159,9 +242,10 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
     Ok(res)
 }
 
+#[inline(always)]
 fn std() -> Path {
     #[cfg(feature = "std")]
-        return parse_quote!(::std);
+    return parse_quote!(::std);
     #[cfg(not(feature = "std"))]
-        return parse_quote!(::core);
+    return parse_quote!(::core);
 }
