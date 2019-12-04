@@ -9,8 +9,9 @@ extern crate proc_macro2;
 
 use proc_macro2::*;
 use syn::export::ToTokens;
+use syn::punctuated::Pair;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, Lit, LitStr, Meta, Path, Result, Type,
+    Attribute, Data, DeriveInput, Error, Field, Fields, Lit, Meta, NestedMeta, Path, Result, Type,
     TypeSlice,
 };
 
@@ -69,13 +70,59 @@ pub fn derive_lowerhex_iter(input: proc_macro::TokenStream) -> proc_macro::Token
         .into()
 }
 
+#[proc_macro_derive(Display, attributes(wrap, display_from))]
+pub fn derive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    display_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn display_inner(input: DeriveInput) -> Result<TokenStream> {
+    let field = get_field(&input)?;
+    let Details {
+        struct_name, std, ..
+    } = Details::from_input(&input.ident, field);
+
+    let mut traits_found = Vec::with_capacity(input.attrs.len());
+    for attr in &input.attrs {
+        let mv = find_meta_value(attr, "display_from");
+        if mv.multiple {
+            return Err(Error::new_spanned(attr, "derive_wrapper: display_from doesn't nested attributes"));
+        }
+        if mv.found {
+            if let Some(trait_name) = mv.name {
+                traits_found.push(trait_name);
+            } else {
+                return Err(Error::new_spanned(attr, "derive_wrapper: when using the display_from attribute on the struct you must specify the trait you want to use to implement Display"));
+            }
+        }
+    }
+
+    let display_from = match traits_found.len() {
+        1 => traits_found.pop().unwrap(),
+        0 => return Err(Error::new_spanned(&input, "Deriving Display requires specifying which trait to use using the `display_from` attribute. Try: `#[display_from(Debug)]`")),
+        _ => return Err(Error::new_spanned(&input, "Deriving Display supports only a single display_from attribute")),
+    };
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #std::fmt::Display for #struct_name {
+            #[inline]
+            fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
+                #std::fmt::#display_from::fmt(&self, f)
+            }
+        }
+    })
+}
+
 fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream> {
     let field = get_field(&input)?;
     let Details {
         struct_name,
         field_name,
-        field_type: _,
         std,
+        ..
     } = Details::from_input(&input.ident, field);
 
     Ok(quote! {
@@ -90,7 +137,6 @@ fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
     })
-
 }
 
 fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
@@ -98,8 +144,8 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
     let Details {
         struct_name,
         field_name,
-        field_type: _,
         std,
+        ..
     } = Details::from_input(&input.ident, field);
 
     Ok(quote! {
@@ -111,7 +157,6 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
     })
-
 }
 
 fn index_inner(input: DeriveInput) -> Result<TokenStream> {
@@ -233,32 +278,62 @@ fn get_field(input: &DeriveInput) -> Result<&Field> {
     }
 }
 
-fn is_wrap(attr: &Attribute) -> (bool, Option<LitStr>) {
-    let mut found = false;
-    let mut lit = None;
+#[derive(Default)]
+struct MetaValue {
+    pub found: bool,
+    pub name: Option<Ident>,
+    pub multiple: bool,
+}
+
+fn find_meta_value(attr: &Attribute, name: &str) -> MetaValue {
+    let mut res = MetaValue::default();
     if let Ok(meta) = attr.parse_meta() {
-        if meta.name() == "wrap" {
-            found = true;
-            if let Meta::NameValue(nv) = meta {
-                if let Lit::Str(l) = nv.lit {
-                    lit = Some(l);
+        if meta.name() == name {
+            res.found = true;
+            match meta {
+                Meta::NameValue(nv) => res.name = lit_to_ident(nv.lit),
+                Meta::List(mut list) => {
+                    res.multiple = list.nested.len() > 1;
+                    res.name = list
+                        .nested
+                        .pop()
+                        .map(Pair::into_value)
+                        .and_then(|nestedmeta| match nestedmeta {
+                            NestedMeta::Literal(lit) => lit_to_ident(lit),
+                            NestedMeta::Meta(meta) => {
+                                if let Meta::Word(ident) = meta {
+                                    Some(ident)
+                                } else {
+                                    None
+                                }
+                            }
+                        });
                 }
+                Meta::Word(_) => (),
             }
         }
     }
-    (found, lit)
+    res
+}
+
+fn lit_to_ident(lit: Lit) -> Option<Ident> {
+    if let Lit::Str(l) = lit {
+        Some(Ident::new(&l.value(), l.span()))
+    } else {
+        None
+    }
 }
 
 fn parse_outer_attributes<'a>(attrs: &[Attribute], fields: &'a Fields) -> Result<Vec<&'a Field>> {
     let mut res = Vec::with_capacity(attrs.len());
     for attr in attrs {
-        let (wrap, lit) = is_wrap(attr);
-        if wrap {
-            if let Some(lit_name) = lit {
+        let mv = find_meta_value(attr, "wrap");
+        if mv.found {
+            if let Some(lit_name) = mv.name {
                 let mut found = false;
                 for f in fields {
                     if let Some(ref field_name) = f.ident {
-                        if lit_name.value() == field_name.to_string() {
+                        if lit_name == field_name.to_string() {
                             res.push(f);
                             found = true;
                             break;
@@ -268,7 +343,7 @@ fn parse_outer_attributes<'a>(attrs: &[Attribute], fields: &'a Fields) -> Result
                 if !found {
                     return Err(Error::new_spanned(
                         &fields,
-                        format!("derive_wrapper: field {} doesn't exist", lit_name.value()),
+                        format!("derive_wrapper: field {} doesn't exist", lit_name),
                     ));
                 }
             } else {
@@ -283,12 +358,11 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
     let mut res = Vec::with_capacity(fields.iter().len());
     for field in fields.iter() {
         for attr in &field.attrs {
-            let (wrap, lit) = is_wrap(attr);
-            if wrap {
+            let mv = find_meta_value(attr, "wrap");
+            if mv.found {
                 if let Some(ref ident) = field.ident {
                     let ident = ident.to_string();
-                    if let Some(lit) = lit {
-                        let lit = lit.value();
+                    if let Some(lit) = mv.name {
                         if lit != ident {
                             return Err(Error::new_spanned(&field, format!("derive_wrapper: The provided field name doesn't match the field name it's above: `{} != {}`", lit, ident)));
                         }
@@ -306,7 +380,7 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
 #[inline(always)]
 fn std() -> Path {
     #[cfg(feature = "std")]
-        return parse_quote!(::std);
+    return parse_quote!(::std);
     #[cfg(not(feature = "std"))]
-        return parse_quote!(::core);
+    return parse_quote!(::core);
 }
