@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[macro_use]
 extern crate derive_wrapper;
 use std::convert::AsRef;
@@ -61,7 +63,35 @@ fn test_display() {
     println!("one: 0x{}", one);
 }
 
+fn test_readme() {
+    #[derive(Debug, Default, Index, AsRef, LowerHexIter)]
+    struct Array32([u8; 32]);
+
+    #[derive(Debug, Default, LowerHex)]
+    struct Flag(i32);
+
+    #[derive(Debug, Index, LowerHexIter, Default)]
+    struct Hi {
+        #[wrap]
+        a: [u8; 32],
+        b: Flag,
+    }
+
+    #[derive(Debug, Display)]
+    #[display_from(Debug)]
+    struct Printer<T: std::fmt::Debug>(T);
+
+    #[derive(Default, LowerHex, Display)]
+    #[display_from(LowerHex)]
+    #[wrap = "two"]
+    struct Big {
+        one: Array32,
+        two: Hi,
+    }
+}
+
 fn main() {
+    test_readme();
     test_lowerhex();
     test_as_ref();
     test_display();
