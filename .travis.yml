@@ -1,0 +1,35 @@
+os:
+- linux
+- osx
+- windows
+language: rust
+cache:
+  - cargo
+  - directories:
+      - $HOME/.rustup
+
+sudo: false
+rust:
+- stable
+- beta
+- nightly
+- 1.22.0
+
+before_script:
+  - if [ ${TRAVIS_RUST_VERSION} == "stable" ]; then
+    rustup component add clippy-preview rustfmt;
+    cargo fmt --all -- --check;
+    cargo clippy -- -D clippy::all -A clippy::cmp_owned;
+    fi
+
+script:
+- cargo build --verbose
+- cargo test --verbose
+- cargo test --verbose --examples
+- cargo build --release
+- cargo test --release
+
+
+notifications:
+  email:
+    on_success: never
