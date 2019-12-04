@@ -1,15 +1,16 @@
 #![recursion_limit = "256"]
+#![cfg_attr(test, deny(warnings))]
 
 #[macro_use]
 extern crate quote;
 #[macro_use]
 extern crate syn;
 
-use syn::export::{ToTokens, TokenStream2, TokenStream};
+use syn::export::{ToTokens, TokenStream, TokenStream2};
 use syn::punctuated::Pair;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, Lit, Meta, NestedMeta, Path, Result, Type, Ident,
-    TypeSlice,
+    Attribute, Data, DeriveInput, Error, Field, Fields, Ident, Lit, Meta, NestedMeta, Path, Result,
+    Type, TypeSlice,
 };
 
 struct Details<'a> {
@@ -77,6 +78,7 @@ pub fn derive_display(input: TokenStream) -> TokenStream {
 
 fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let Details {
         struct_name, std, ..
     } = Details::from_input(&input.ident, field);
@@ -85,7 +87,10 @@ fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
     for attr in &input.attrs {
         let mv = find_meta_value(attr, "display_from");
         if mv.multiple {
-            return Err(Error::new_spanned(attr, "derive_wrapper: display_from doesn't nested attributes"));
+            return Err(Error::new_spanned(
+                attr,
+                "derive_wrapper: display_from doesn't nested attributes",
+            ));
         }
         if mv.found {
             if let Some(trait_name) = mv.name {
@@ -104,7 +109,7 @@ fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #[allow(unused_qualifications)]
-        impl #std::fmt::Display for #struct_name {
+        impl #impl_generics #std::fmt::Display for #struct_name #ty_generics #where_clause {
             #[inline]
             fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
                 #std::fmt::#display_from::fmt(&self, f)
@@ -115,6 +120,7 @@ fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
 
 fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let Details {
         struct_name,
         field_name,
@@ -124,7 +130,7 @@ fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #[allow(unused_qualifications)]
-        impl #std::fmt::LowerHex<> for #struct_name {
+        impl #impl_generics #std::fmt::LowerHex<> for #struct_name #ty_generics #where_clause {
             #[inline]
             fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
                 for ch in self.#field_name.iter() {
@@ -137,6 +143,7 @@ fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -147,7 +154,7 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #[allow(unused_qualifications)]
-        impl #std::fmt::LowerHex for #struct_name {
+        impl #impl_generics #std::fmt::LowerHex for #struct_name #ty_generics #where_clause {
             #[inline]
             fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
                 #std::fmt::LowerHex::fmt(&self.#field_name, f)
@@ -157,6 +164,7 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -168,7 +176,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #[allow(unused_qualifications)]
-        impl #std::ops::Index<usize> for #struct_name {
+        impl #impl_generics #std::ops::Index<usize> for #struct_name #ty_generics #where_clause {
             type Output = <#field_type as #std::ops::Index<usize>>::Output;
             #[inline]
             fn index(&self, index: usize) -> &Self::Output {
@@ -177,7 +185,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         #[allow(unused_qualifications)]
-        impl #std::ops::Index<#std::ops::Range<usize>> for #struct_name {
+        impl #impl_generics #std::ops::Index<#std::ops::Range<usize>> for #struct_name #ty_generics #where_clause {
             type Output = <#field_type as #std::ops::Index<#std::ops::Range<usize>>>::Output;
 
             #[inline]
@@ -187,7 +195,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         #[allow(unused_qualifications)]
-        impl #std::ops::Index<#std::ops::RangeTo<usize>> for #struct_name {
+        impl #impl_generics #std::ops::Index<#std::ops::RangeTo<usize>> for #struct_name #ty_generics #where_clause {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeTo<usize>>>::Output;
 
             #[inline]
@@ -197,7 +205,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         #[allow(unused_qualifications)]
-        impl #std::ops::Index<#std::ops::RangeFrom<usize>> for #struct_name {
+        impl #impl_generics #std::ops::Index<#std::ops::RangeFrom<usize>> for #struct_name #ty_generics #where_clause {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeFrom<usize>>>::Output;
 
             #[inline]
@@ -207,7 +215,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         #[allow(unused_qualifications)]
-        impl #std::ops::Index<#std::ops::RangeFull> for #struct_name {
+        impl #impl_generics #std::ops::Index<#std::ops::RangeFull> for #struct_name #ty_generics #where_clause {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeFull>>::Output;
 
             #[inline]
@@ -230,6 +238,7 @@ fn array_to_slice(ty: Type) -> Type {
 }
 
 fn aserf_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -240,7 +249,7 @@ fn aserf_inner(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #[allow(unused_qualifications)]
-        impl #std::convert::AsRef<#field_type> for #struct_name {
+        impl #impl_generics #std::convert::AsRef<#field_type> for #struct_name #ty_generics #where_clause {
             #[inline]
             fn as_ref(&self) -> &#field_type {
                 &self.#field_name
