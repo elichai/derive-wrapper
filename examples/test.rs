@@ -8,7 +8,7 @@ use std::convert::AsRef;
 #[display_from(Debug)]
 struct Me(u8);
 
-#[derive(AsRef, Default, LowerHexIter, Display)]
+#[derive(AsRef, Default, LowerHexIter, Display, From)]
 #[display_from(LowerHex)]
 struct One {
     a: [u8; 32],
@@ -38,6 +38,12 @@ struct Other {
 //
 //#[derive(AsRef)]
 //struct Fail2;
+
+
+fn test_from() {
+    let a: One = [55u8;32].into();
+    println!("{}", a);
+}
 
 fn test_lowerhex() {
     let a = You {
@@ -77,7 +83,7 @@ fn test_readme() {
         b: Flag,
     }
 
-    #[derive(Debug, Display)]
+    #[derive(Debug, Display, From)]
     #[display_from(Debug)]
     struct Printer<T: std::fmt::Debug>(T);
 
@@ -95,4 +101,5 @@ fn main() {
     test_lowerhex();
     test_as_ref();
     test_display();
+    test_from();
 }

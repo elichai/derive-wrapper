@@ -76,6 +76,36 @@ pub fn derive_display(input: TokenStream) -> TokenStream {
         .into()
 }
 
+#[proc_macro_derive(From, attributes(wrap))]
+pub fn derive_from(input: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    from_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn from_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let field = get_field(&input)?;
+    let Details {
+        struct_name,
+        field_name,
+        field_type,
+        std,
+        ..
+    } = Details::from_input(&input.ident, field);
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #impl_generics #std::convert::From<#field_type> for #struct_name #ty_generics #where_clause {
+            #[inline]
+            fn from(wrap: #field_type) -> Self {
+                #struct_name {#field_name: wrap}
+            }
+        }
+    })
+}
+
 fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
