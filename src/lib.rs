@@ -4,20 +4,17 @@
 extern crate quote;
 #[macro_use]
 extern crate syn;
-extern crate proc_macro;
-extern crate proc_macro2;
 
-use proc_macro2::*;
-use syn::export::ToTokens;
+use syn::export::{ToTokens, TokenStream2, TokenStream};
 use syn::punctuated::Pair;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, Lit, Meta, NestedMeta, Path, Result, Type,
+    Attribute, Data, DeriveInput, Error, Field, Fields, Lit, Meta, NestedMeta, Path, Result, Type, Ident,
     TypeSlice,
 };
 
 struct Details<'a> {
     struct_name: &'a Ident,
-    field_name: TokenStream,
+    field_name: TokenStream2,
     field_type: &'a Type,
     std: Path,
 }
@@ -39,7 +36,7 @@ impl<'a> Details<'a> {
 }
 
 #[proc_macro_derive(AsRef, attributes(wrap))]
-pub fn derive_asref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_asref(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     aserf_inner(derive_input)
         .unwrap_or_else(|e| e.to_compile_error())
@@ -47,7 +44,7 @@ pub fn derive_asref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro_derive(Index, attributes(wrap))]
-pub fn derive_index(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_index(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     index_inner(derive_input)
         .unwrap_or_else(|e| e.to_compile_error())
@@ -55,7 +52,7 @@ pub fn derive_index(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 #[proc_macro_derive(LowerHex, attributes(wrap))]
-pub fn derive_lowerhex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_lowerhex(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     lowerhex_inner(derive_input)
         .unwrap_or_else(|e| e.to_compile_error())
@@ -63,7 +60,7 @@ pub fn derive_lowerhex(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 }
 
 #[proc_macro_derive(LowerHexIter, attributes(wrap))]
-pub fn derive_lowerhex_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_lowerhex_iter(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     lowerhexiter_inner(derive_input)
         .unwrap_or_else(|e| e.to_compile_error())
@@ -71,14 +68,14 @@ pub fn derive_lowerhex_iter(input: proc_macro::TokenStream) -> proc_macro::Token
 }
 
 #[proc_macro_derive(Display, attributes(wrap, display_from))]
-pub fn derive_display(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn derive_display(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     display_inner(derive_input)
         .unwrap_or_else(|e| e.to_compile_error())
         .into()
 }
 
-fn display_inner(input: DeriveInput) -> Result<TokenStream> {
+fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let Details {
         struct_name, std, ..
@@ -116,7 +113,7 @@ fn display_inner(input: DeriveInput) -> Result<TokenStream> {
     })
 }
 
-fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream> {
+fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -139,7 +136,7 @@ fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream> {
     })
 }
 
-fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
+fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -159,7 +156,7 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
     })
 }
 
-fn index_inner(input: DeriveInput) -> Result<TokenStream> {
+fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let Details {
         struct_name,
@@ -232,7 +229,7 @@ fn array_to_slice(ty: Type) -> Type {
     }
 }
 
-fn aserf_inner(input: DeriveInput) -> Result<TokenStream> {
+fn aserf_inner(input: DeriveInput) -> Result<TokenStream2> {
     let field = get_field(&input)?;
     let Details {
         struct_name,

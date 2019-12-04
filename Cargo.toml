@@ -4,10 +4,9 @@ version = "0.1.0"
 authors = ["Elichai Turkel <elichai.turkel@gmail.com>"]
 
 [dependencies]
-syn = { version = "0.15", features = ["full", "extra-traits", "derive"] } # -> For development
-#syn = "0.15"
+#syn = { version = "0.15", features = ["full", "extra-traits", "derive"] } # -> For development
+syn = "0.15"
 quote = "0.6"
-proc-macro2 = "0.4"
 
 [features]
 default = ["std"]
