@@ -2,6 +2,12 @@
 name = "derive_wrapper"
 version = "0.1.0"
 authors = ["Elichai Turkel <elichai.turkel@gmail.com>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+description = "Rust custom derive macro for wrapping types"
+categories = ["no-std", "data-structures"]
+keywords = ["derive", "wrap", "macro", "custom-derive", "display_from"]
+repository = "https://github.com/elichai/derive-wrapper"
 
 [dependencies]
 #syn = { version = "0.15", features = ["full", "extra-traits", "derive"] } # -> For development
@@ -12,6 +18,13 @@ quote = "0.6"
 default = ["std"]
 std = []
 
-
 [lib]
 proc-macro = true
+
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
+
+[badges]
+travis-ci = { repository = "elichai/derive-wrapper" }
