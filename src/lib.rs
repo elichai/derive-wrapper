@@ -53,6 +53,67 @@ pub fn derive_index(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .into()
 }
 
+#[proc_macro_derive(LowerHex, attributes(wrap))]
+pub fn derive_lowerhex(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    lowerhex_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(LowerHexIter, attributes(wrap))]
+pub fn derive_lowerhex_iter(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    lowerhexiter_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream> {
+    let field = get_field(&input)?;
+    let Details {
+        struct_name,
+        field_name,
+        field_type: _,
+        std,
+    } = Details::from_input(&input.ident, field);
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #std::fmt::LowerHex<> for #struct_name {
+            #[inline]
+            fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
+                for ch in self.#field_name.iter() {
+                    #std::fmt::LowerHex::fmt(&ch, f)?;
+                }
+                #std::result::Result::Ok(())
+            }
+        }
+    })
+
+}
+
+fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream> {
+    let field = get_field(&input)?;
+    let Details {
+        struct_name,
+        field_name,
+        field_type: _,
+        std,
+    } = Details::from_input(&input.ident, field);
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #std::fmt::LowerHex for #struct_name {
+            #[inline]
+            fn fmt(&self, f: &mut #std::fmt::Formatter) -> #std::fmt::Result {
+                #std::fmt::LowerHex::fmt(&self.#field_name, f)
+            }
+        }
+    })
+
+}
+
 fn index_inner(input: DeriveInput) -> Result<TokenStream> {
     let field = get_field(&input)?;
     let Details {
@@ -73,7 +134,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-         #[allow(unused_qualifications)]
+        #[allow(unused_qualifications)]
         impl #std::ops::Index<#std::ops::Range<usize>> for #struct_name {
             type Output = <#field_type as #std::ops::Index<#std::ops::Range<usize>>>::Output;
 
@@ -83,7 +144,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-         #[allow(unused_qualifications)]
+        #[allow(unused_qualifications)]
         impl #std::ops::Index<#std::ops::RangeTo<usize>> for #struct_name {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeTo<usize>>>::Output;
 
@@ -93,7 +154,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-         #[allow(unused_qualifications)]
+        #[allow(unused_qualifications)]
         impl #std::ops::Index<#std::ops::RangeFrom<usize>> for #struct_name {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeFrom<usize>>>::Output;
 
@@ -103,7 +164,7 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-         #[allow(unused_qualifications)]
+        #[allow(unused_qualifications)]
         impl #std::ops::Index<#std::ops::RangeFull> for #struct_name {
             type Output = <#field_type as #std::ops::Index<#std::ops::RangeFull>>::Output;
 
@@ -245,7 +306,7 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
 #[inline(always)]
 fn std() -> Path {
     #[cfg(feature = "std")]
-    return parse_quote!(::std);
+        return parse_quote!(::std);
     #[cfg(not(feature = "std"))]
-    return parse_quote!(::core);
+        return parse_quote!(::core);
 }
