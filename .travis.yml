@@ -8,7 +8,6 @@ cache:
   - directories:
       - $HOME/.rustup
 
-sudo: false
 rust:
 - stable
 - beta
@@ -19,7 +18,7 @@ before_script:
   - if [ ${TRAVIS_RUST_VERSION} == "stable" ]; then
     rustup component add clippy-preview rustfmt;
     cargo fmt --all -- --check;
-    cargo clippy -- -D clippy::all -A clippy::cmp_owned;
+    cargo clippy -- -A clippy::cmp_owned -W clippy::all;
     fi
 
 script:
