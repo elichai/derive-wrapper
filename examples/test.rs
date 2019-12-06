@@ -116,3 +116,11 @@ fn main() {
     test_from();
     test_index_heap();
 }
+
+#[derive(AsRef, Index)]
+#[wrap = 0]
+struct Tupling(Vec<u8>, usize);
+
+#[derive(AsRef, Index)]
+#[wrap = "0"]
+struct Tuplinn(Vec<u8>, usize);
