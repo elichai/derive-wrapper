@@ -14,6 +14,11 @@ struct One {
     a: [u8; 32],
 }
 
+#[derive(AsRef, Default, LowerHexIter, Display, From, Index)]
+#[display_from(LowerHex)]
+#[index_output(u8)]
+struct Heap(Box<[u8]>);
+
 #[derive(AsRef, Index, LowerHexIter)]
 #[wrap = "b"]
 struct You {
@@ -39,10 +44,17 @@ struct Other {
 //#[derive(AsRef)]
 //struct Fail2;
 
-
 fn test_from() {
-    let a: One = [55u8;32].into();
+    let a: One = [55u8; 32].into();
     println!("{}", a);
+}
+
+fn test_index_heap() {
+    let a = vec![1, 2, 3, 4, 5, 6, 7].into_boxed_slice();
+    let heap = Heap(a);
+    assert_eq!(heap[0], 1);
+    assert_eq!(&heap[..2], &[1, 2]);
+    assert_eq!(&heap[..], &[1, 2, 3, 4, 5, 6, 7]);
 }
 
 fn test_lowerhex() {
@@ -102,4 +114,5 @@ fn main() {
     test_as_ref();
     test_display();
     test_from();
+    test_index_heap();
 }

@@ -6,7 +6,7 @@ extern crate quote;
 #[macro_use]
 extern crate syn;
 
-use syn::export::{ToTokens, TokenStream, TokenStream2};
+use syn::export::{Span, ToTokens, TokenStream, TokenStream2};
 use syn::punctuated::Pair;
 use syn::{
     Attribute, Data, DeriveInput, Error, Field, Fields, Ident, Lit, Meta, NestedMeta, Path, Result,
@@ -44,7 +44,7 @@ pub fn derive_asref(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Index, attributes(wrap))]
+#[proc_macro_derive(Index, attributes(wrap, index_output))]
 pub fn derive_index(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     index_inner(derive_input)
@@ -86,7 +86,7 @@ pub fn derive_from(input: TokenStream) -> TokenStream {
 
 fn from_inner(input: DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let field = get_field(&input)?;
+    let field = get_field(&input, "From")?;
     let Details {
         struct_name,
         field_name,
@@ -107,35 +107,16 @@ fn from_inner(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
-    let field = get_field(&input)?;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let Details {
-        struct_name, std, ..
-    } = Details::from_input(&input.ident, field);
-
-    let mut traits_found = Vec::with_capacity(input.attrs.len());
-    for attr in &input.attrs {
-        let mv = find_meta_value(attr, "display_from");
-        if mv.multiple {
-            return Err(Error::new_spanned(
-                attr,
-                "derive_wrapper: display_from doesn't nested attributes",
-            ));
-        }
-        if mv.found {
-            if let Some(trait_name) = mv.name {
-                traits_found.push(trait_name);
-            } else {
-                return Err(Error::new_spanned(attr, "derive_wrapper: when using the display_from attribute on the struct you must specify the trait you want to use to implement Display"));
-            }
-        }
-    }
-
-    let display_from = match traits_found.len() {
-        1 => traits_found.pop().unwrap(),
-        0 => return Err(Error::new_spanned(&input, "Deriving Display requires specifying which trait to use using the `display_from` attribute. Try: `#[display_from(Debug)]`")),
-        _ => return Err(Error::new_spanned(&input, "Deriving Display supports only a single display_from attribute")),
-    };
+    let struct_name = &input.ident;
+    let std = std();
+    let display_from = get_meta_value(
+        &input.attrs,
+        "Display",
+        "display_from",
+        Some("#[display_from(Debug)]`"),
+    )?
+    .expect("provided example, should always return a value if succeeded.");
 
     Ok(quote! {
         #[allow(unused_qualifications)]
@@ -149,7 +130,7 @@ fn display_inner(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
-    let field = get_field(&input)?;
+    let field = get_field(&input, "LowerHexIter")?;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let Details {
         struct_name,
@@ -174,7 +155,7 @@ fn lowerhexiter_inner(input: DeriveInput) -> Result<TokenStream2> {
 
 fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let field = get_field(&input)?;
+    let field = get_field(&input, "LowerHex")?;
     let Details {
         struct_name,
         field_name,
@@ -193,9 +174,14 @@ fn lowerhex_inner(input: DeriveInput) -> Result<TokenStream2> {
     })
 }
 
-fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
+#[allow(non_snake_case)]
+fn generate_index_from_T(
+    output: Option<TokenStream2>,
+    T: TokenStream2,
+    input: &DeriveInput,
+    field: &Field,
+) -> TokenStream2 {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let field = get_field(&input)?;
     let Details {
         struct_name,
         field_name,
@@ -203,57 +189,102 @@ fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
         std,
     } = Details::from_input(&input.ident, field);
     let field_type = array_to_slice(field_type.clone());
+    let output = output.unwrap_or_else(|| quote!(<#field_type as #std::ops::Index<#T>>::Output));
+    quote! {
+        #[allow(unused_qualifications)]
+        impl #impl_generics #std::ops::Index<#T> for #struct_name #ty_generics #where_clause {
+            type Output = #output;
+            #[inline]
+            fn index(&self, index: #T) -> &Self::Output {
+                &self.#field_name[index]
+            }
+        }
+    }
+}
+
+fn index_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let field = get_field(&input, "Index")?;
+    let index_output = get_meta_value(&input.attrs, "Index", "index_output", None)?
+        .map(ToTokens::into_token_stream);
+    let std = std();
+
+    let slice_output = index_output.clone().map(|index| quote!([#index]));
+
+    let index_usize = generate_index_from_T(index_output, quote!(usize), &input, field);
+    let index_range_usize = generate_index_from_T(
+        slice_output.clone(),
+        quote!(#std::ops::Range<usize>),
+        &input,
+        field,
+    );
+    let index_range_to_usize = generate_index_from_T(
+        slice_output.clone(),
+        quote!(#std::ops::RangeTo<usize>),
+        &input,
+        field,
+    );
+    let index_range_from_usize = generate_index_from_T(
+        slice_output.clone(),
+        quote!(#std::ops::RangeFrom<usize>),
+        &input,
+        field,
+    );
+    let index_range_full =
+        generate_index_from_T(slice_output, quote!(#std::ops::RangeFull), &input, field);
 
     Ok(quote! {
-        #[allow(unused_qualifications)]
-        impl #impl_generics #std::ops::Index<usize> for #struct_name #ty_generics #where_clause {
-            type Output = <#field_type as #std::ops::Index<usize>>::Output;
-            #[inline]
-            fn index(&self, index: usize) -> &Self::Output {
-                &self.#field_name[index]
-            }
-        }
-
-        #[allow(unused_qualifications)]
-        impl #impl_generics #std::ops::Index<#std::ops::Range<usize>> for #struct_name #ty_generics #where_clause {
-            type Output = <#field_type as #std::ops::Index<#std::ops::Range<usize>>>::Output;
-
-            #[inline]
-            fn index(&self, index: #std::ops::Range<usize>) -> &Self::Output {
-                &self.#field_name[index]
-            }
-        }
-
-        #[allow(unused_qualifications)]
-        impl #impl_generics #std::ops::Index<#std::ops::RangeTo<usize>> for #struct_name #ty_generics #where_clause {
-            type Output = <#field_type as #std::ops::Index<#std::ops::RangeTo<usize>>>::Output;
-
-            #[inline]
-            fn index(&self, index: #std::ops::RangeTo<usize>) -> &Self::Output {
-                &self.#field_name[index]
-            }
-        }
-
-        #[allow(unused_qualifications)]
-        impl #impl_generics #std::ops::Index<#std::ops::RangeFrom<usize>> for #struct_name #ty_generics #where_clause {
-            type Output = <#field_type as #std::ops::Index<#std::ops::RangeFrom<usize>>>::Output;
-
-            #[inline]
-            fn index(&self, index: #std::ops::RangeFrom<usize>) -> &Self::Output {
-                &self.#field_name[index]
-            }
-        }
-
-        #[allow(unused_qualifications)]
-        impl #impl_generics #std::ops::Index<#std::ops::RangeFull> for #struct_name #ty_generics #where_clause {
-            type Output = <#field_type as #std::ops::Index<#std::ops::RangeFull>>::Output;
-
-            #[inline]
-            fn index(&self, index: #std::ops::RangeFull) -> &Self::Output {
-                &self.#field_name[index]
-            }
-        }
+        #index_usize
+        #index_range_usize
+        #index_range_to_usize
+        #index_range_from_usize
+        #index_range_full
     })
+}
+
+fn get_meta_value(
+    attrs: &[Attribute],
+    trait_name: &str,
+    attribute_name: &str,
+    example_if_required: Option<&str>,
+) -> Result<Option<Ident>> {
+    let mut traits_found = Vec::with_capacity(attrs.len());
+    for attr in attrs {
+        let mv = find_meta_value(attr, attribute_name);
+        if mv.multiple {
+            return Err(Error::new_spanned(
+                attr,
+                format!(
+                    "derive_wrapper: {} doesn't nested attributes",
+                    attribute_name
+                ),
+            ));
+        }
+        if mv.found {
+            if let Some(trait_name) = mv.name {
+                traits_found.push(trait_name);
+            } else {
+                return Err(Error::new_spanned(attr, format!("derive_wrapper: when using the {} attribute on the struct you must specify the trait you want to use to implement {}", attribute_name, trait_name)));
+            }
+        }
+    }
+
+    match traits_found.len() {
+        1 => Ok(traits_found.pop()),
+        0 => {
+            if let Some(example) = example_if_required {
+                Err(Error::new(Span::call_site(), format!("Deriving {} requires specifying which trait to use using the `{}` attribute. Try: `{}`", trait_name, attribute_name, example)))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Err(Error::new(
+            Span::call_site(),
+            format!(
+                "Deriving {} supports only a single {} attribute",
+                trait_name, attribute_name
+            ),
+        )),
+    }
 }
 
 fn array_to_slice(ty: Type) -> Type {
@@ -269,7 +300,7 @@ fn array_to_slice(ty: Type) -> Type {
 
 fn aserf_inner(input: DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let field = get_field(&input)?;
+    let field = get_field(&input, "AsRef")?;
     let Details {
         struct_name,
         field_name,
@@ -288,13 +319,13 @@ fn aserf_inner(input: DeriveInput) -> Result<TokenStream2> {
     })
 }
 
-fn get_field(input: &DeriveInput) -> Result<&Field> {
+fn get_field<'a>(input: &'a DeriveInput, trait_name: &str) -> Result<&'a Field> {
     let fields = match input.data {
         Data::Struct(ref data) => &data.fields,
         _ => {
             return Err(Error::new_spanned(
                 &input,
-                "Deriving AsRef is supported only in structs",
+                format!("Deriving {} is supported only in structs", trait_name),
             ))
         }
     };
@@ -304,12 +335,18 @@ fn get_field(input: &DeriveInput) -> Result<&Field> {
         marked_fields.extend(parse_field_attributes(&fields)?);
         match marked_fields.len() {
             1 => Ok(marked_fields.pop().unwrap()),
-            0 => Err(Error::new_spanned(&input, "Deriving AsRef for a struct with multiple fields requires specifying a wrap attribute")),
-            _ => Err(Error::new_spanned(&input, "Deriving AsRef supports only a single wrap attribute")),
+            0 => Err(Error::new_spanned(&input, format!("Deriving {} for a struct with multiple fields requires specifying a wrap attribute", trait_name))),
+            _ => Err(Error::new_spanned(&input, format!("Deriving {} supports only a single wrap attribute", trait_name))),
         }
     } else {
         fields.iter().next().ok_or_else(|| {
-            Error::new_spanned(&input, "Deriving AsRef for an empty struct isn't supported")
+            Error::new_spanned(
+                &input,
+                format!(
+                    "Deriving {} for an empty struct isn't supported",
+                    trait_name
+                ),
+            )
         })
     }
 }
