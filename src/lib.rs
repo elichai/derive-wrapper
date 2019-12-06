@@ -382,16 +382,16 @@ impl MetaValue {
     }
 
     pub fn get_name(&self) -> Option<String> {
-        self.name.as_ref().map(|name| match name {
-            Member::Unnamed(index) => index.index.to_string(),
-            Member::Named(ident) => ident.to_string(),
+        self.name.as_ref().map(| name| match name {
+            &Member::Unnamed(ref index) => index.index.to_string(),
+            &Member::Named(ref ident) => ident.to_string(),
         })
     }
 
     pub fn get_index(&self) -> Option<u32> {
         self.name.as_ref().and_then(|n| match n {
-            Member::Unnamed(i) => Some(i.index),
-            Member::Named(_) => None,
+            &Member::Unnamed(ref i) => Some(i.index),
+            &Member::Named(_) => None,
         })
     }
 }
