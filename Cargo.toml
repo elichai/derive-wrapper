@@ -8,6 +8,10 @@ description = "Rust custom derive macro for wrapping types"
 categories = ["no-std", "data-structures"]
 keywords = ["derive", "wrap", "macro", "custom-derive", "display_from"]
 repository = "https://github.com/elichai/derive-wrapper"
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+]
 
 [dependencies]
 #syn = { version = "0.15", features = ["full", "extra-traits", "derive"] } # -> For development
@@ -20,11 +24,6 @@ std = []
 
 [lib]
 proc-macro = true
-
-include = [
-    "**/*.rs",
-    "Cargo.toml",
-]
 
 [badges]
 travis-ci = { repository = "elichai/derive-wrapper" }
