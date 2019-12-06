@@ -9,8 +9,8 @@ extern crate syn;
 use syn::export::{Span, ToTokens, TokenStream, TokenStream2};
 use syn::punctuated::Pair;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, Ident, Lit, Meta, NestedMeta, Path, Result,
-    Type, TypeSlice,
+    Attribute, Data, DeriveInput, Error, Field, Fields, Ident, Index, Lit, Member, Meta,
+    NestedMeta, Path, Result, Type, TypeSlice,
 };
 
 struct Details<'a> {
@@ -246,7 +246,7 @@ fn get_meta_value(
     trait_name: &str,
     attribute_name: &str,
     example_if_required: Option<&str>,
-) -> Result<Option<Ident>> {
+) -> Result<Option<Member>> {
     let mut traits_found = Vec::with_capacity(attrs.len());
     for attr in attrs {
         let mv = find_meta_value(attr, attribute_name);
@@ -354,8 +354,46 @@ fn get_field<'a>(input: &'a DeriveInput, trait_name: &str) -> Result<&'a Field> 
 #[derive(Default)]
 struct MetaValue {
     pub found: bool,
-    pub name: Option<Ident>,
+    pub name: Option<Member>,
     pub multiple: bool,
+}
+
+impl MetaValue {
+    pub fn set_name_ident(&mut self, ident: Ident) {
+        self.name = Some(Member::Named(ident));
+    }
+
+    pub fn set_name_index(&mut self, index: u32, span: Span) {
+        self.name = Some(Member::Unnamed(Index { index, span }));
+    }
+
+    pub fn set_name_from_lit(&mut self, lit: Lit) {
+        match lit {
+            Lit::Str(l) => {
+                if let Ok(index) = l.value().parse::<u32>() {
+                    self.set_name_index(index, l.span());
+                } else {
+                    self.set_name_ident(Ident::new(&l.value(), l.span()));
+                }
+            }
+            Lit::Int(int) => self.set_name_index(int.value() as u32, int.span()),
+            _ => (),
+        }
+    }
+
+    pub fn get_name(&self) -> Option<String> {
+        self.name.as_ref().map(|name| match name {
+            Member::Unnamed(index) => index.index.to_string(),
+            Member::Named(ident) => ident.to_string(),
+        })
+    }
+
+    pub fn get_index(&self) -> Option<u32> {
+        self.name.as_ref().and_then(|n| match n {
+            Member::Unnamed(i) => Some(i.index),
+            Member::Named(_) => None,
+        })
+    }
 }
 
 fn find_meta_value(attr: &Attribute, name: &str) -> MetaValue {
@@ -364,23 +402,20 @@ fn find_meta_value(attr: &Attribute, name: &str) -> MetaValue {
         if meta.name() == name {
             res.found = true;
             match meta {
-                Meta::NameValue(nv) => res.name = lit_to_ident(nv.lit),
+                Meta::NameValue(nv) => res.set_name_from_lit(nv.lit),
                 Meta::List(mut list) => {
                     res.multiple = list.nested.len() > 1;
-                    res.name = list
-                        .nested
-                        .pop()
-                        .map(Pair::into_value)
-                        .and_then(|nestedmeta| match nestedmeta {
-                            NestedMeta::Literal(lit) => lit_to_ident(lit),
+
+                    if let Some(nestedmeta) = list.nested.pop().map(Pair::into_value) {
+                        match nestedmeta {
+                            NestedMeta::Literal(lit) => res.set_name_from_lit(lit),
                             NestedMeta::Meta(meta) => {
                                 if let Meta::Word(ident) = meta {
-                                    Some(ident)
-                                } else {
-                                    None
+                                    res.set_name_ident(ident)
                                 }
                             }
-                        });
+                        }
+                    }
                 }
                 Meta::Word(_) => (),
             }
@@ -389,20 +424,18 @@ fn find_meta_value(attr: &Attribute, name: &str) -> MetaValue {
     res
 }
 
-fn lit_to_ident(lit: Lit) -> Option<Ident> {
-    if let Lit::Str(l) = lit {
-        Some(Ident::new(&l.value(), l.span()))
-    } else {
-        None
-    }
-}
-
 fn parse_outer_attributes<'a>(attrs: &[Attribute], fields: &'a Fields) -> Result<Vec<&'a Field>> {
     let mut res = Vec::with_capacity(attrs.len());
     for attr in attrs {
         let mv = find_meta_value(attr, "wrap");
         if mv.found {
-            if let Some(lit_name) = mv.name {
+            if let Some(index) = mv.get_index() {
+                if let Some(field) = fields.iter().nth(index as usize) {
+                    res.push(field);
+                } else {
+                    return Err(Error::new_spanned(&fields, format!("derive_wrapper: there's no field no. {} in the struct or it's not a tuple", index)));
+                }
+            } else if let Some(lit_name) = mv.get_name() {
                 let mut found = false;
                 for f in fields {
                     if let Some(ref field_name) = f.ident {
@@ -435,7 +468,7 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
             if mv.found {
                 if let Some(ref ident) = field.ident {
                     let ident = ident.to_string();
-                    if let Some(lit) = mv.name {
+                    if let Some(lit) = mv.get_name() {
                         if lit != ident {
                             return Err(Error::new_spanned(&field, format!("derive_wrapper: The provided field name doesn't match the field name it's above: `{} != {}`", lit, ident)));
                         }
