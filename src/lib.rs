@@ -9,7 +9,7 @@ extern crate syn;
 use syn::export::{Span, ToTokens, TokenStream, TokenStream2};
 use syn::punctuated::Pair;
 use syn::{
-    Attribute, Data, DeriveInput, Error, Field, Fields, Ident, Index, Lit, Member, Meta,
+    Attribute, Data, DataEnum, DeriveInput, Error, Field, Fields, Ident, Index, Lit, Member, Meta,
     NestedMeta, Path, Result, Type, TypeSlice,
 };
 
@@ -76,7 +76,7 @@ pub fn derive_display(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(From, attributes(wrap))]
+#[proc_macro_derive(From, attributes(wrap, derive_from))]
 pub fn derive_from(input: TokenStream) -> TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
     from_inner(derive_input)
@@ -109,6 +109,65 @@ fn error_inner(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn from_inner(input: DeriveInput) -> Result<TokenStream2> {
+    match input.data {
+        Data::Struct(_) => from_inner_struct(&input),
+        Data::Enum(ref data) => from_inner_enum(&input, &data),
+        Data::Union(_) => Err(Error::new_spanned(
+            &input,
+            "Deriving From is not supported in unions",
+        )),
+    }
+}
+
+fn from_inner_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let std = std();
+    let mut res = TokenStream2::default();
+    let enum_name = &input.ident;
+
+    for variant in &data.variants {
+        let variant_name = &variant.ident;
+        for attr in &variant.attrs {
+            let mv = find_meta_value(attr, "derive_from");
+            if mv.found {
+                if variant.fields.iter().len() > 1 {
+                    return Err(Error::new_spanned(
+                        &variant,
+                        "Deriving From for a enum variant with multiple fields isn't supported",
+                    ));
+                }
+                let field =
+                    match variant.fields.iter().next() {
+                        Some(field) => field,
+                        None => return Err(Error::new_spanned(
+                            &variant,
+                            "Deriving From for a enum variant without any fields isn't supported",
+                        )),
+                    };
+                let field_type = &field.ty;
+                let ret_value = match field.ident {
+                    Some(ref field_name) => quote! {#enum_name::#variant_name{#field_name: inner}},
+                    None => quote! {#enum_name::#variant_name(inner)},
+                };
+
+                res = quote! {
+                    #res
+                    #[allow(unused_qualifications)]
+                    impl #impl_generics #std::convert::From<#field_type> for #enum_name #ty_generics #where_clause {
+                        #[inline]
+                        fn from(inner: #field_type) -> Self {
+                            #ret_value
+                        }
+                    }
+                };
+                break;
+            }
+        }
+    }
+    Ok(res)
+}
+
+fn from_inner_struct(input: &DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field = get_field(&input, "From")?;
     let Details {
@@ -491,9 +550,8 @@ fn parse_field_attributes(fields: &Fields) -> Result<Vec<&Field>> {
             let mv = find_meta_value(attr, "wrap");
             if mv.found {
                 if let Some(ref ident) = field.ident {
-                    let ident = ident.to_string();
                     if let Some(lit) = mv.get_name() {
-                        if lit != ident {
+                        if ident != &lit {
                             return Err(Error::new_spanned(&field, format!("derive_wrapper: The provided field name doesn't match the field name it's above: `{} != {}`", lit, ident)));
                         }
                     }

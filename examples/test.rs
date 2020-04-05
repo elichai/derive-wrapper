@@ -4,18 +4,19 @@
 extern crate derive_wrapper;
 use std::convert::AsRef;
 use std::error::Error;
+use std::marker::PhantomData;
 
-#[derive(AsRef, Default, Display, Debug)]
+#[derive(AsRef, Default, Display, Debug, PartialEq)]
 #[display_from(Debug)]
 struct Me(u8);
 
-#[derive(AsRef, Default, LowerHexIter, Display, From, Error, Debug)]
+#[derive(AsRef, Default, LowerHexIter, Display, From, Error, Debug, PartialEq)]
 #[display_from(LowerHex)]
 struct One {
     a: [u8; 32],
 }
 
-#[derive(AsRef, Default, LowerHexIter, Display, From, Index)]
+#[derive(AsRef, Default, LowerHexIter, Display, From, Index, PartialEq, Debug)]
 #[display_from(LowerHex)]
 #[index_output(u8)]
 struct Heap(Box<[u8]>);
@@ -28,12 +29,28 @@ struct You {
     b: [u8; 16],
 }
 
-#[derive(Debug, AsRef, Default, LowerHex, Display)]
+#[derive(Debug, AsRef, Default, LowerHex, Display, PartialEq)]
 #[display_from(LowerHex)]
 struct Other {
     a: (),
     #[wrap]
     b: u8,
+}
+
+#[cfg(not(MSRV))]
+#[derive(From, PartialEq, Debug)]
+enum Hi<T> {
+    #[derive_from]
+    First(u8),
+    #[derive_from]
+    Second(Heap),
+    Third,
+    #[derive_from]
+    Fourth {
+        other: Other,
+    },
+    #[derive_from]
+    Fifth(PhantomData<T>),
 }
 
 //#[derive(AsRef)]
@@ -52,6 +69,29 @@ fn test_from() {
         a.to_string(),
         "3737373737373737373737373737373737373737373737373737373737373737"
     );
+}
+
+fn test_from_enum() {
+    #[cfg(not(MSRV))]
+    {
+        let first: Hi<()> = Hi::from(5u8);
+        assert_eq!(first, Hi::First(5));
+
+        let b = vec![1u8, 2, 3].into_boxed_slice();
+        let second: Hi<()> = Hi::from(Heap::from(b.clone()));
+        assert_eq!(second, Hi::Second(Heap::from(b)));
+
+        let fourth: Hi<()> = Hi::from(Other { a: (), b: 5 });
+        assert_eq!(
+            fourth,
+            Hi::Fourth {
+                other: Other { a: (), b: 5 }
+            }
+        );
+
+        let fifth: Hi<()> = Hi::from(PhantomData);
+        assert_eq!(fifth, Hi::Fifth(PhantomData));
+    }
 }
 
 fn test_error() {
@@ -131,6 +171,22 @@ fn test_readme() {
         one: Array32,
         two: Hi,
     }
+
+    #[cfg(not(MSRV))]
+    #[derive(From)]
+    enum MyEnum<T> {
+        #[derive_from]
+        First(u8),
+        #[derive_from]
+        Second(Array32),
+        Third,
+        #[derive_from]
+        Fourth {
+            other: Vec<u8>,
+        },
+        #[derive_from]
+        Fifth(PhantomData<T>),
+    }
 }
 
 fn main() {
@@ -141,6 +197,7 @@ fn main() {
     test_from();
     test_index_heap();
     test_error();
+    test_from_enum();
 }
 
 #[cfg(not(MSRV))]

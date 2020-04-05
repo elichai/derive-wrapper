@@ -30,4 +30,19 @@ struct Big {
     one: Array32,
     two: Hi,
 }
+
+#[derive(From)]
+enum MyEnum<T> {
+    #[derive_from]
+    First(u8),
+    #[derive_from]
+    Second(Array32),
+    Third,
+    #[derive_from]
+    Fourth {
+        other: Vec<u8>,
+    },
+    #[derive_from]
+    Fifth(PhantomData<T>),
+}
 ```
