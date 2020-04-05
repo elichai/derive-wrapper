@@ -117,6 +117,7 @@ fn main() {
     test_index_heap();
 }
 
+#[cfg(not(MSRV))]
 #[derive(AsRef, Index)]
 #[wrap = 0]
 struct Tupling(Vec<u8>, usize);

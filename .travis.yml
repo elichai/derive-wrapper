@@ -18,10 +18,11 @@ before_script:
   - if [ ${TRAVIS_RUST_VERSION} == "stable" ]; then
     rustup component add clippy-preview rustfmt;
     cargo fmt --all -- --check;
-    cargo clippy -- -A clippy::cmp_owned -W clippy::all;
+    cargo clippy -- -D clippy::all;
     fi
 
 script:
+- if [ ${TRAVIS_RUST_VERSION} == "1.22.0" ]; then export RUSTFLAGS='--cfg MSRV'; fi
 - cargo build --verbose
 - cargo test --verbose
 - cargo run --verbose --example test
