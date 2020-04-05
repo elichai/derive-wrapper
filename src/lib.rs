@@ -84,6 +84,30 @@ pub fn derive_from(input: TokenStream) -> TokenStream {
         .into()
 }
 
+#[proc_macro_derive(Error)]
+pub fn derive_error(input: TokenStream) -> TokenStream {
+    let derive_input = parse_macro_input!(input as DeriveInput);
+    error_inner(derive_input)
+        .unwrap_or_else(|e| e.to_compile_error())
+        .into()
+}
+
+fn error_inner(input: DeriveInput) -> Result<TokenStream2> {
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let type_name = &input.ident;
+    let std = std();
+
+    Ok(quote! {
+        #[allow(unused_qualifications)]
+        impl #impl_generics #std::error::Error for #type_name #ty_generics #where_clause {
+            #[inline]
+            fn description(&self) -> &str {
+                "description() is deprecated; use Display"
+            }
+        }
+    })
+}
+
 fn from_inner(input: DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let field = get_field(&input, "From")?;

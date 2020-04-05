@@ -1,14 +1,15 @@
-#![allow(dead_code)]
+#![allow(dead_code, bare_trait_objects)]
 
 #[macro_use]
 extern crate derive_wrapper;
 use std::convert::AsRef;
+use std::error::Error;
 
 #[derive(AsRef, Default, Display, Debug)]
 #[display_from(Debug)]
 struct Me(u8);
 
-#[derive(AsRef, Default, LowerHexIter, Display, From)]
+#[derive(AsRef, Default, LowerHexIter, Display, From, Error, Debug)]
 #[display_from(LowerHex)]
 struct One {
     a: [u8; 32],
@@ -47,6 +48,20 @@ struct Other {
 fn test_from() {
     let a: One = [55u8; 32].into();
     println!("{}", a);
+    assert_eq!(
+        a.to_string(),
+        "3737373737373737373737373737373737373737373737373737373737373737"
+    );
+}
+
+fn test_error() {
+    let a: One = [173; 32].into();
+    let a: Box<Error> = Box::new(a);
+    println!("{}", a);
+    assert_eq!(
+        a.to_string(),
+        "adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad"
+    );
 }
 
 fn test_index_heap() {
@@ -62,9 +77,12 @@ fn test_lowerhex() {
         a: (),
         b: [5u8; 16],
     };
-    println!("0x{:02x}", a);
+    let fmt = format!("0x{:02x}", a);
+    println!("{}", fmt);
+    assert_eq!(fmt, "0x05050505050505050505050505050505");
     let a = Other { a: (), b: 255 };
-    println!("0x{:02x}", a);
+    let fmt = format!("0x{:02x}", a);
+    assert_eq!(fmt, "0xff");
 }
 
 fn test_as_ref() {
@@ -75,10 +93,17 @@ fn test_as_ref() {
 fn test_display() {
     let a = Me(175);
     let b = Other { a: (), b: 135 };
-    println!("me: {}, Other: 0x{}", a, b);
+    let fmt = format!("me: {}, Other: 0x{}", a, b);
+    println!("{}", fmt);
+    assert_eq!(fmt, "me: Me(175), Other: 0x87");
 
     let one = One { a: [173; 32] };
-    println!("one: 0x{}", one);
+    let fmt = format!("one: 0x{}", one);
+    println!("{}", fmt);
+    assert_eq!(
+        fmt,
+        "one: 0xadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad"
+    )
 }
 
 fn test_readme() {
@@ -95,11 +120,11 @@ fn test_readme() {
         b: Flag,
     }
 
-    #[derive(Debug, Display, From)]
+    #[derive(Debug, Display, From, Error)]
     #[display_from(Debug)]
     struct Printer<T: std::fmt::Debug>(T);
 
-    #[derive(Default, LowerHex, Display)]
+    #[derive(Default, LowerHex, Display, Debug)]
     #[display_from(LowerHex)]
     #[wrap = "two"]
     struct Big {
@@ -115,6 +140,7 @@ fn main() {
     test_display();
     test_from();
     test_index_heap();
+    test_error();
 }
 
 #[cfg(not(MSRV))]

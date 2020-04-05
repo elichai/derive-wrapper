@@ -19,7 +19,7 @@ struct Hi {
     b: Flag,
 }
 
-#[derive(Debug, Display, From)]
+#[derive(Debug, Display, From, Error)]
 #[display_from(Debug)]
 struct Printer<T: std::fmt::Debug>(T);
 
