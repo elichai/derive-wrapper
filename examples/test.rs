@@ -4,6 +4,7 @@
 extern crate derive_wrapper;
 use std::convert::AsRef;
 use std::error::Error;
+use std::io::{self, Empty};
 use std::marker::PhantomData;
 
 #[derive(AsRef, Default, Display, Debug, PartialEq)]
@@ -51,6 +52,8 @@ enum Hi<T> {
     },
     #[derive_from]
     Fifth(PhantomData<T>),
+    #[derive_from(Empty, f32)]
+    Seventh,
 }
 
 //#[derive(AsRef)]
@@ -91,6 +94,12 @@ fn test_from_enum() {
 
         let fifth: Hi<()> = Hi::from(PhantomData);
         assert_eq!(fifth, Hi::Fifth(PhantomData));
+
+        let seventh1: Hi<()> = Hi::from(io::empty());
+        assert_eq!(seventh1, Hi::Seventh);
+
+        let seventh2: Hi<()> = Hi::from(52.4f32);
+        assert_eq!(seventh2, Hi::Seventh);
     }
 }
 
@@ -186,6 +195,8 @@ fn test_readme() {
         },
         #[derive_from]
         Fifth(PhantomData<T>),
+        #[derive_from(f32, f64)]
+        Floats,
     }
 }
 

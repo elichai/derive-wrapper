@@ -44,5 +44,7 @@ enum MyEnum<T> {
     },
     #[derive_from]
     Fifth(PhantomData<T>),
+    #[derive_from(f32, f64)]
+    Floats,
 }
 ```
