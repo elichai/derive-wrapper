@@ -46,5 +46,8 @@ enum MyEnum<T> {
     Fifth(PhantomData<T>),
     #[derive_from(f32, f64)]
     Floats,
+    #[derive_from(std::io::Error, std::fmt::Error)]
+    Errors,
+
 }
 ```
