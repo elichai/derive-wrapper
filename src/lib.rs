@@ -165,6 +165,8 @@ fn from_inner_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream2>
                         }
                     };
                 }
+            } else if attr.path.is_ident("doc") {
+                // Do nothing here
             } else {
                 let attr_name = path_to_string(&attr.path);
                 return Err(Error::new_spanned(
