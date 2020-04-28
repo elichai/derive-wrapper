@@ -127,37 +127,30 @@ fn from_inner_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream2>
     for variant in &data.variants {
         let variant_name = &variant.ident;
         for attr in &variant.attrs {
-            let mv = find_meta_value(
-                attr,
-                "derive_from",
-                "#[derive_from(FirstType, SecondType)])",
-            )?;
-            if mv.found {
+            if attr.path.is_ident("derive_from") {
                 if variant.fields.iter().len() > 1 {
                     return Err(Error::new_spanned(
                         &variant,
                         "Deriving From for an enum variant with multiple fields isn't supported",
                     ));
                 }
+
                 let mut froms = Vec::new();
-                let optional_field = variant.fields.iter().next();
-                match optional_field {
-                    Some(field) => match field.ident {
-                        Some(ref field_name) => froms.push((
-                            field.ty.clone().into_token_stream(),
-                            quote! {{#field_name: inner}},
-                        )),
-                        None => {
-                            froms.push((field.ty.clone().into_token_stream(), quote! {(inner)}))
+                if attr.tts.is_empty() {
+                    let field = variant.fields.iter().next().ok_or_else(||Error::new_spanned(&variant,
+                                                                                             "Deriving From for an enum variant without fields require explicit From type. Try: `#[derive_from(FromType)]`"))?;
+                    match field.ident {
+                        Some(ref field_name) => {
+                            froms.push((field.ty.clone(), quote! {{#field_name: inner}}))
                         }
-                    },
-                    None => {
-                        for name in mv.name {
-                            froms.push((name.into_token_stream(), quote! {}))
-                        }
+                        None => froms.push((field.ty.clone(), quote! {(inner)})),
+                    };
+                } else {
+                    let types = extract_types_from_potential_tupled_attribute(&attr)?;
+                    for ty in types {
+                        froms.push((ty, quote! {}))
                     }
                 }
-
                 for from in froms {
                     let field_type = from.0;
                     let postfix = from.1;
@@ -172,8 +165,12 @@ fn from_inner_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream2>
                         }
                     };
                 }
-
-                break;
+            } else {
+                let attr_name = path_to_string(&attr.path);
+                return Err(Error::new_spanned(
+                    &attr,
+                    &format!("The `#[{}]` attribute is not supported in enums", attr_name),
+                ));
             }
         }
     }
@@ -450,6 +447,31 @@ fn get_field<'a>(input: &'a DeriveInput, trait_name: &str) -> Result<&'a Field> 
             )
         })
     }
+}
+
+fn extract_types_from_potential_tupled_attribute(attr: &Attribute) -> Result<Vec<Type>> {
+    let ty: Type = syn::parse2(attr.tts.clone())?;
+    Ok(match ty {
+        Type::Paren(paren) => vec![*paren.elem],
+        Type::Tuple(tuple) => tuple.elems.into_iter().collect(),
+        _ => vec![ty],
+    })
+}
+
+fn path_to_string(p: &Path) -> String {
+    let mut res = String::with_capacity(p.segments.len() * 6);
+    if p.leading_colon.is_some() {
+        res.push_str("::");
+    }
+    for segment in p.segments.iter() {
+        res.push_str(&segment.ident.to_string());
+        res.push_str("::");
+    }
+    if !p.segments.is_empty() {
+        let len = res.len() - 2;
+        res.truncate(len);
+    }
+    res
 }
 
 #[derive(Default)]

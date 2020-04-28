@@ -52,7 +52,7 @@ enum Hi<T> {
     },
     #[derive_from]
     Fifth(PhantomData<T>),
-    #[derive_from(Empty, f32)]
+    #[derive_from(Empty, f32, io::Error)]
     Seventh,
 }
 
@@ -64,6 +64,12 @@ enum Hi<T> {
 //
 //#[derive(AsRef)]
 //struct Fail2;
+
+// #[derive(From)]
+// enum Fail3 {
+//     #[wrap]
+//     Yo,
+// }
 
 fn test_from() {
     let a: One = [55u8; 32].into();
@@ -197,6 +203,8 @@ fn test_readme() {
         Fifth(PhantomData<T>),
         #[derive_from(f32, f64)]
         Floats,
+        #[derive_from(std::io::Error, std::fmt::Error)]
+        Errors,
     }
 }
 
