@@ -41,6 +41,7 @@ struct Other {
 #[cfg(not(MSRV))]
 #[derive(From, PartialEq, Debug)]
 enum Hi<T> {
+    /// Docstring
     #[derive_from]
     First(u8),
     #[derive_from]
@@ -54,6 +55,13 @@ enum Hi<T> {
     Fifth(PhantomData<T>),
     #[derive_from(Empty, f32, io::Error)]
     Seventh,
+}
+
+#[cfg(not(MSRV))]
+#[derive(From, PartialEq, Debug)]
+enum CustomErr<E: std::error::Error> {
+    #[derive_from]
+    Other(E),
 }
 
 //#[derive(AsRef)]
