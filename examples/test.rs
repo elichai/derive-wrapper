@@ -44,6 +44,8 @@ enum Hi<T> {
     /// Docstring
     #[derive_from]
     First(u8),
+    // Here we test that all other attributes are allowed
+    #[cfg(not(MSRV))]
     #[derive_from]
     Second(Heap),
     Third,

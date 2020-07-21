@@ -165,14 +165,6 @@ fn from_inner_enum(input: &DeriveInput, data: &DataEnum) -> Result<TokenStream2>
                         }
                     };
                 }
-            } else if attr.path.is_ident("doc") {
-                // Do nothing here
-            } else {
-                let attr_name = path_to_string(&attr.path);
-                return Err(Error::new_spanned(
-                    &attr,
-                    &format!("The `#[{}]` attribute is not supported in enums", attr_name),
-                ));
             }
         }
     }
@@ -458,22 +450,6 @@ fn extract_types_from_potential_tupled_attribute(attr: &Attribute) -> Result<Vec
         Type::Tuple(tuple) => tuple.elems.into_iter().collect(),
         _ => vec![ty],
     })
-}
-
-fn path_to_string(p: &Path) -> String {
-    let mut res = String::with_capacity(p.segments.len() * 6);
-    if p.leading_colon.is_some() {
-        res.push_str("::");
-    }
-    for segment in p.segments.iter() {
-        res.push_str(&segment.ident.to_string());
-        res.push_str("::");
-    }
-    if !p.segments.is_empty() {
-        let len = res.len() - 2;
-        res.truncate(len);
-    }
-    res
 }
 
 #[derive(Default)]
